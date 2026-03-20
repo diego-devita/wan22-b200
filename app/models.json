@@ -3,35 +3,35 @@
     "name": "WAN 2.2 High Noise (lightx2v)",
     "file": "wan2.2_i2v_A14b_high_noise_lightx2v.safetensors",
     "dest": "diffusion_models",
-    "repo": "lightx2v/Wan2.2-Official-Models",
+    "url": "https://huggingface.co/lightx2v/Wan2.2-Official-Models/resolve/main/wan2.2_i2v_A14b_high_noise_lightx2v.safetensors",
     "size_gb": 28.6
   },
   {
     "name": "WAN 2.2 Low Noise (lightx2v)",
     "file": "wan2.2_i2v_A14b_low_noise_lightx2v.safetensors",
     "dest": "diffusion_models",
-    "repo": "lightx2v/Wan2.2-Official-Models",
+    "url": "https://huggingface.co/lightx2v/Wan2.2-Official-Models/resolve/main/wan2.2_i2v_A14b_low_noise_lightx2v.safetensors",
     "size_gb": 28.6
   },
   {
     "name": "UMT5 XXL FP32 Text Encoder",
     "file": "wan21UMT5XxlFP32_fp32.safetensors",
     "dest": "text_encoders",
-    "repo": "LS110824/text_encoders",
+    "url": "https://huggingface.co/LS110824/text_encoders/resolve/main/wan21UMT5XxlFP32_fp32.safetensors",
     "size_gb": 11.0
   },
   {
     "name": "WAN 2.1 VAE FP32",
     "file": "Wan2_1_VAE_fp32.safetensors",
     "dest": "vae",
-    "repo": "Kijai/WanVideo_comfy",
+    "url": "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_fp32.safetensors",
     "size_gb": 0.5
   },
   {
     "name": "4x Foolhardy Remacri Upscaler",
     "file": "4x_foolhardy_Remacri.pth",
     "dest": "upscale_models",
-    "repo": "FacehugmanIII/4x_foolhardy_Remacri",
+    "url": "https://huggingface.co/FacehugmanIII/4x_foolhardy_Remacri/resolve/main/4x_foolhardy_Remacri.pth",
     "size_gb": 0.067
   }
 ]

@@ -8,235 +8,63 @@
   @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;700;800&display=swap');
 
   :root {
-    --bg: #0a0a0a;
-    --surface: #111111;
-    --border: #1e1e1e;
-    --accent: #e8ff47;
-    --text: #e8e8e8;
-    --muted: #555;
-    --success: #47ffa0;
-    --error: #ff4766;
-    --warning: #ffb347;
-    --mono: 'Space Mono', monospace;
-    --display: 'Syne', sans-serif;
+    --bg: #0a0a0a; --surface: #111111; --border: #1e1e1e;
+    --accent: #e8ff47; --text: #e8e8e8; --muted: #555;
+    --success: #47ffa0; --error: #ff4766;
+    --mono: 'Space Mono', monospace; --display: 'Syne', sans-serif;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 13px;
-    min-height: 100vh;
-  }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; min-height: 100vh; }
 
   body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
+    content: ''; position: fixed; inset: 0;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: 9999;
-    opacity: 0.4;
+    pointer-events: none; z-index: 9999; opacity: 0.4;
   }
 
-  header {
-    padding: 40px 48px 32px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-  }
-
-  .logo {
-    font-family: var(--display);
-    font-weight: 800;
-    font-size: 28px;
-    letter-spacing: -1px;
-    line-height: 1;
-  }
-
+  header { padding: 40px 48px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-end; justify-content: space-between; }
+  .logo { font-family: var(--display); font-weight: 800; font-size: 28px; letter-spacing: -1px; line-height: 1; }
   .logo span { color: var(--accent); }
+  .logo-sub { font-size: 10px; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; margin-top: 6px; }
 
-  .logo-sub {
-    font-size: 10px;
-    letter-spacing: 3px;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-top: 6px;
-  }
+  .back-link { color: var(--muted); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; border: 1px solid var(--border); padding: 6px 12px; transition: all 0.15s; }
+  .back-link:hover { border-color: var(--accent); color: var(--accent); }
 
-  .back-link {
-    color: var(--muted);
-    font-size: 11px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    text-decoration: none;
-    border: 1px solid var(--border);
-    padding: 6px 12px;
-    transition: all 0.15s;
-  }
+  main { max-width: 860px; margin: 0 auto; padding: 48px; display: flex; flex-direction: column; gap: 12px; }
+  .page-title { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
 
-  .back-link:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  main {
-    max-width: 860px;
-    margin: 0 auto;
-    padding: 48px 48px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .page-title {
-    font-size: 10px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 8px;
-  }
-
-  /* ── model card ─── */
-  .model-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 20px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    transition: border-color 0.2s;
-  }
-
+  .model-card { background: var(--surface); border: 1px solid var(--border); padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; transition: border-color 0.2s; }
   .model-card.downloading { border-color: var(--accent); }
-  .model-card.present { border-color: var(--border); }
 
-  .model-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
+  .model-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .model-info { flex: 1; }
-
-  .model-name {
-    font-family: var(--display);
-    font-weight: 700;
-    font-size: 14px;
-    margin-bottom: 4px;
-  }
-
-  .model-file {
-    color: var(--muted);
-    font-size: 10px;
-    letter-spacing: 1px;
-    word-break: break-all;
-    margin-bottom: 4px;
-  }
-
-  .model-meta {
-    font-size: 10px;
-    color: var(--muted);
-  }
-
+  .model-name { font-family: var(--display); font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .model-file { color: var(--muted); font-size: 10px; letter-spacing: 1px; word-break: break-all; margin-bottom: 4px; }
+  .model-meta { font-size: 10px; color: var(--muted); }
   .model-meta span { margin-right: 16px; }
 
-  .status-badge {
-    font-size: 10px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    padding: 4px 10px;
-    border: 1px solid;
-    white-space: nowrap;
-    flex-shrink: 0;
-    align-self: flex-start;
-  }
+  .status-badge { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; padding: 4px 10px; border: 1px solid; white-space: nowrap; flex-shrink: 0; align-self: flex-start; }
+  .status-badge.present     { color: var(--success); border-color: var(--success); }
+  .status-badge.missing     { color: var(--muted);   border-color: var(--border);  }
+  .status-badge.downloading { color: var(--accent);  border-color: var(--accent);  }
+  .status-badge.error       { color: var(--error);   border-color: var(--error);   }
 
-  .status-badge.present { color: var(--success); border-color: var(--success); }
-  .status-badge.missing { color: var(--muted); border-color: var(--border); }
-  .status-badge.downloading { color: var(--accent); border-color: var(--accent); }
-  .status-badge.error { color: var(--error); border-color: var(--error); }
-
-  /* progress bar */
   .progress-wrap { display: none; flex-direction: column; gap: 6px; }
   .progress-wrap.visible { display: flex; }
+  .progress-bar { height: 2px; background: var(--border); overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 1s linear; }
+  .progress-meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
 
-  .progress-bar {
-    height: 2px;
-    background: var(--border);
-    overflow: hidden;
-  }
+  .btn-dl { align-self: flex-start; margin-top: 4px; padding: 8px 16px; background: transparent; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+  .btn-dl:hover:not(:disabled) { background: var(--accent); color: #000; }
+  .btn-dl:disabled { border-color: var(--border); color: var(--muted); cursor: not-allowed; }
 
-  .progress-fill {
-    height: 100%;
-    background: var(--accent);
-    width: 0%;
-    transition: width 1s linear;
-  }
-
-  .progress-meta {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
-    color: var(--muted);
-  }
-
-  /* download button */
-  .btn-download {
-    align-self: flex-start;
-    margin-top: 4px;
-    padding: 8px 16px;
-    background: transparent;
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-download:hover:not(:disabled) {
-    background: var(--accent);
-    color: #000;
-  }
-
-  .btn-download:disabled {
-    border-color: var(--border);
-    color: var(--muted);
-    cursor: not-allowed;
-  }
-
-  /* note */
-  .note {
-    margin-top: 24px;
-    padding: 16px 20px;
-    border: 1px solid var(--border);
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.8;
-  }
-
+  .note { margin-top: 24px; padding: 16px 20px; border: 1px solid var(--border); font-size: 11px; color: var(--muted); line-height: 1.8; }
   .note strong { color: var(--text); }
 
-  /* spinner inline */
-  .spinner-sm {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border: 1px solid var(--accent);
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    margin-right: 6px;
-    vertical-align: middle;
-  }
-
+  .spinner-sm { display: inline-block; width: 10px; height: 10px; border: 1px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -253,7 +81,6 @@
 <main>
   <div class="page-title">Modelli disponibili</div>
   <div id="cards-container"></div>
-
   <div class="note">
     <strong>Note:</strong> I modelli vengono scaricati su <code>/workspace/ComfyUI/models/</code> (Network Volume RunPod — persistente).
     Il download avviene in background; la pagina si aggiorna ogni 3s automaticamente.
@@ -262,102 +89,109 @@
 </main>
 
 <script>
-let pollTimer = null;
-// Track cards that are actively downloading so we keep showing progress
-const downloading = new Set();
+// cardMap: filename → card DOM element, built once per model, never recreated
+const cardMap = {};
 
 function fmtBytes(bytes) {
   if (!bytes) return '0 B';
-  if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + ' KB';
   if (bytes < 1024 ** 3) return (bytes / 1024 ** 2).toFixed(1) + ' MB';
   return (bytes / 1024 ** 3).toFixed(2) + ' GB';
 }
 
-function renderCards(models) {
-  const container = document.getElementById('cards-container');
+function urlDomain(url) {
+  try { return new URL(url).hostname; }
+  catch { return url; }
+}
 
-  models.forEach(m => {
-    let card = document.getElementById(`card-${CSS.escape(m.file)}`);
-    const isNew = !card;
+function getOrCreateCard(m) {
+  if (cardMap[m.file]) return cardMap[m.file];
 
-    if (isNew) {
-      card = document.createElement('div');
-      card.id = `card-${m.file}`;
-      card.className = 'model-card';
-      card.innerHTML = `
-        <div class="model-top">
-          <div class="model-info">
-            <div class="model-name">${m.name}</div>
-            <div class="model-file">${m.file}</div>
-            <div class="model-meta">
-              <span>📁 ${m.dest}</span>
-              <span>⚖ ${m.size_gb} GB</span>
-              <span>🔗 ${m.repo}</span>
-            </div>
-          </div>
-          <div class="status-badge missing" id="badge-${m.file}">MISSING</div>
+  const card = document.createElement('div');
+  card.className = 'model-card';
+  card.innerHTML = `
+    <div class="model-top">
+      <div class="model-info">
+        <div class="model-name">${m.name}</div>
+        <div class="model-file">${m.file}</div>
+        <div class="model-meta">
+          <span>📁 ${m.dest}</span>
+          <span>⚖ ${m.size_gb} GB</span>
+          <span>🔗 ${urlDomain(m.url)}</span>
         </div>
-        <div class="progress-wrap" id="progress-${m.file}">
-          <div class="progress-bar">
-            <div class="progress-fill" id="fill-${m.file}"></div>
-          </div>
-          <div class="progress-meta">
-            <span id="progress-label-${m.file}">0%</span>
-            <span id="progress-bytes-${m.file}">—</span>
-          </div>
-        </div>
-        <button class="btn-download" id="btn-${m.file}" onclick="startDownload('${m.file}', this)">
-          ↓ Scarica
-        </button>
-      `;
-      container.appendChild(card);
-    }
+      </div>
+      <div class="status-badge missing" data-badge>MISSING</div>
+    </div>
+    <div class="progress-wrap" data-progress>
+      <div class="progress-bar"><div class="progress-fill" data-fill></div></div>
+      <div class="progress-meta">
+        <span data-pct>—</span>
+        <span data-pbytes>—</span>
+      </div>
+    </div>
+    <button class="btn-dl" data-btn>↓ Scarica</button>
+  `;
 
-    // Update status
-    const badge = document.getElementById(`badge-${m.file}`);
-    const progressWrap = document.getElementById(`progress-${m.file}`);
-    const fill = document.getElementById(`fill-${m.file}`);
-    const progressLabel = document.getElementById(`progress-label-${m.file}`);
-    const progressBytes = document.getElementById(`progress-bytes-${m.file}`);
-    const btn = document.getElementById(`btn-${m.file}`);
+  card.querySelector('[data-btn]').addEventListener('click', () => startDownload(m.file));
+  document.getElementById('cards-container').appendChild(card);
+  cardMap[m.file] = card;
+  return card;
+}
 
-    badge.className = `status-badge ${m.status}`;
+function updateCard(m) {
+  const card    = getOrCreateCard(m);
+  const badge   = card.querySelector('[data-badge]');
+  const progWrap= card.querySelector('[data-progress]');
+  const fill    = card.querySelector('[data-fill]');
+  const pct     = card.querySelector('[data-pct]');
+  const pbytes  = card.querySelector('[data-pbytes]');
+  const btn     = card.querySelector('[data-btn]');
 
-    if (m.status === 'present') {
-      badge.textContent = 'PRESENT';
-      btn.disabled = true;
-      btn.textContent = '✓ Presente';
-      progressWrap.classList.remove('visible');
-      card.classList.remove('downloading');
-      card.classList.add('present');
-      downloading.delete(m.file);
-    } else if (m.status === 'downloading') {
-      badge.innerHTML = `<span class="spinner-sm"></span>DOWNLOADING`;
-      btn.disabled = true;
-      btn.textContent = 'Scaricamento...';
-      progressWrap.classList.add('visible');
+  badge.className = `status-badge ${m.status}`;
+
+  if (m.status === 'present') {
+    badge.textContent = 'PRESENT';
+    btn.disabled = true;
+    btn.textContent = '✓ Presente';
+    progWrap.classList.remove('visible');
+    card.classList.remove('downloading');
+
+  } else if (m.status === 'downloading') {
+    badge.innerHTML = '<span class="spinner-sm"></span>DOWNLOADING';
+    btn.disabled = true;
+    btn.textContent = 'Scaricamento...';
+    progWrap.classList.add('visible');
+    card.classList.add('downloading');
+
+    if (m.progress !== null) {
+      // Content-Length known: show real percentage
       fill.style.width = m.progress + '%';
-      progressLabel.textContent = m.progress.toFixed(1) + '%';
-      progressBytes.textContent = `${fmtBytes(m.on_disk_bytes)} / ${fmtBytes(m.expected_bytes)}`;
-      card.classList.add('downloading');
-      downloading.add(m.file);
-    } else if (m.status === 'error') {
-      badge.textContent = 'ERROR';
-      btn.disabled = false;
-      btn.textContent = '↺ Riprova';
-      progressWrap.classList.remove('visible');
-      card.classList.remove('downloading');
-      downloading.delete(m.file);
+      pct.textContent  = m.progress.toFixed(1) + '%';
     } else {
-      // missing
-      badge.textContent = 'MISSING';
-      btn.disabled = false;
-      btn.textContent = '↓ Scarica';
-      progressWrap.classList.remove('visible');
-      card.classList.remove('downloading');
+      // Content-Length unknown: animate bar, show bytes only
+      fill.style.width = '100%';
+      fill.style.opacity = '0.4';
+      pct.textContent  = '…';
     }
-  });
+    pbytes.textContent = m.expected_bytes > 0
+      ? fmtBytes(m.on_disk_bytes) + ' / ' + fmtBytes(m.expected_bytes)
+      : fmtBytes(m.on_disk_bytes);
+
+  } else if (m.status === 'error') {
+    badge.textContent = 'ERROR';
+    btn.disabled = false;
+    btn.textContent = '↺ Riprova';
+    progWrap.classList.remove('visible');
+    card.classList.remove('downloading');
+
+  } else {
+    // missing
+    badge.textContent = 'MISSING';
+    btn.disabled = false;
+    btn.textContent = '↓ Scarica';
+    progWrap.classList.remove('visible');
+    card.classList.remove('downloading');
+  }
 }
 
 async function fetchModels() {
@@ -365,26 +199,28 @@ async function fetchModels() {
     const r = await fetch('/api/admin/models');
     if (!r.ok) return;
     const models = await r.json();
-    renderCards(models);
+    models.forEach(updateCard);
   } catch (e) {
-    console.error('fetchModels error:', e);
+    console.error('fetchModels:', e);
   }
 }
 
-async function startDownload(filename, btn) {
+async function startDownload(filename) {
+  const card = cardMap[filename];
+  if (!card) return;
+  const btn = card.querySelector('[data-btn]');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-sm"></span>Avvio...';
   try {
-    const r = await fetch(`/api/admin/models/download/${encodeURIComponent(filename)}`, { method: 'POST' });
+    const r = await fetch('/api/admin/models/download/' + encodeURIComponent(filename), { method: 'POST' });
     if (!r.ok) {
-      const err = await r.json();
+      const err = await r.json().catch(() => ({}));
       alert('Errore avvio download: ' + (err.detail || r.status));
       btn.disabled = false;
       btn.textContent = '↓ Scarica';
       return;
     }
-    // fetchModels will update UI on next poll
-    await fetchModels();
+    // next fetchModels poll will update the card
   } catch (e) {
     alert('Errore: ' + e.message);
     btn.disabled = false;
@@ -392,7 +228,6 @@ async function startDownload(filename, btn) {
   }
 }
 
-// Initial load + polling
 fetchModels();
 setInterval(fetchModels, 3000);
 </script>

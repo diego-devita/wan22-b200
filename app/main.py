@@ -1,9 +1,8 @@
 import copy, uuid, json, os, threading
 from pathlib import Path
-from typing import Optional
 
-import httpx
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends, Request
+import httpx, requests
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
@@ -11,9 +10,9 @@ import secrets
 app = FastAPI(title="WAN 2.2 i2v API")
 
 # ── Auth ─────────────────────────────────────────────────────
-# API_KEY is set as environment variable in RunPod template.
+# Set API_KEY as environment variable in the RunPod template.
 # All routes except /api/health require HTTP Basic Auth.
-# Username: anything  Password: API_KEY value
+# Username: anything   Password: API_KEY value
 security = HTTPBasic()
 API_KEY = os.environ.get("API_KEY", "changeme")
 
@@ -28,50 +27,81 @@ def require_auth(credentials: HTTPBasicCredentials = Depends(security)):
     return credentials
 
 # ── Paths ────────────────────────────────────────────────────
-COMFY_URL       = "http://127.0.0.1:8188"
-COMFYUI_DIR     = Path("/workspace/ComfyUI")
-MODELS_BASE     = COMFYUI_DIR / "models"
-MODELS_JSON     = Path("/workspace/models.json")
-MODELS_JSON_DEFAULT = Path("/app/models.json")
+COMFY_URL           = "http://127.0.0.1:8188"
+COMFYUI_DIR         = Path("/workspace/ComfyUI")
+MODELS_BASE         = COMFYUI_DIR / "models"
+MODELS_JSON         = Path("/workspace/models.json")   # override (editable without rebuild)
+MODELS_JSON_DEFAULT = Path("/app/models.json")         # baked into image
 
-# WWW root: prefer volume (editable), fall back to image
-WWW_ROOT = Path("/workspace/www")
-WWW_DEFAULT = Path("/app/www")
+WWW_ROOT    = Path("/workspace/www")   # override
+WWW_DEFAULT = Path("/app/www")         # baked into image
 
-def www(path: str) -> Path:
-    p = WWW_ROOT / path
+def www(filename: str) -> Path:
+    p = WWW_ROOT / filename
     if p.exists():
         return p
-    return WWW_DEFAULT / path
+    return WWW_DEFAULT / filename
 
-# ── Download state ────────────────────────────────────────────
-# { filename: {"status": "downloading"|"done"|"error", "bytes": int} }
+# ── Download state (in-memory, reset on pod restart) ─────────
+# { filename: {"status": "downloading"|"done"|"error",
+#              "bytes": int,    ← bytes written so far
+#              "total": int,    ← Content-Length from server (0 if unknown)
+#              "error": str} }  ← only on error
 _download_state: dict = {}
 
-def _do_download(repo: str, filename: str, dest_dir: Path):
-    _download_state[filename] = {"status": "downloading", "bytes": 0}
+def _do_download(url: str, filename: str, dest_dir: Path):
+    """
+    Download a file from any HTTP URL directly to dest_dir/filename.
+    Uses a .tmp file during download; renames atomically on success.
+    Updates _download_state["bytes"] every 8 MB chunk for live progress.
+    Reads Content-Length from response headers for real percentage;
+    if the server omits it, progress is indeterminate (total = 0).
+    """
+    _download_state[filename] = {"status": "downloading", "bytes": 0, "total": 0}
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_file = dest_dir / filename
+    tmp_file  = dest_dir / (filename + ".tmp")
+
     try:
-        from huggingface_hub import hf_hub_download
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        hf_hub_download(
-            repo_id=repo,
-            filename=filename,
-            local_dir=str(dest_dir),
-        )
-        _download_state[filename] = {"status": "done", "bytes": (dest_dir / filename).stat().st_size}
+        with requests.get(url, stream=True, timeout=60, allow_redirects=True) as r:
+            r.raise_for_status()
+            total = int(r.headers.get("Content-Length", 0))
+            _download_state[filename]["total"] = total
+            written = 0
+            with open(tmp_file, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8 * 1024 * 1024):  # 8 MB
+                    if chunk:
+                        f.write(chunk)
+                        written += len(chunk)
+                        _download_state[filename]["bytes"] = written
+
+        tmp_file.rename(dest_file)
+        _download_state[filename] = {
+            "status": "done",
+            "bytes": dest_file.stat().st_size,
+            "total": total,
+        }
+
     except Exception as e:
-        _download_state[filename] = {"status": "error", "bytes": 0, "error": str(e)}
+        if tmp_file.exists():
+            tmp_file.unlink()
+        _download_state[filename] = {
+            "status": "error",
+            "bytes": 0,
+            "total": 0,
+            "error": str(e),
+        }
 
 # ── Workflow ──────────────────────────────────────────────────
-LOAD_IMAGE_NODE    = "218"
+LOAD_IMAGE_NODE      = "218"
 POSITIVE_PROMPT_NODE = "243"
-DURATION_NODE      = "319"
+DURATION_NODE        = "319"
 
 WORKFLOW = {
-    "80": {"inputs": {"frame_rate": 16, "loop_count": 0, "filename_prefix": "teacache", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["290", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Initial 16FPS Video"}},
-    "94": {"inputs": {"frame_rate": 60, "loop_count": 0, "filename_prefix": "Hunyuan/videos/30/vid", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["303", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Final 60 FPS Video"}},
-    "95": {"inputs": {"frame_rate": 16, "loop_count": 0, "filename_prefix": "Hunyuan/videos/24/vid", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["98", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Upscaled 16 FPS video"}},
-    "98": {"inputs": {"upscale_method": "lanczos", "width": ["220", 0], "height": ["219", 0], "crop": "center", "image": ["290", 0]}, "class_type": "ImageScale"},
+    "80":  {"inputs": {"frame_rate": 16, "loop_count": 0, "filename_prefix": "teacache", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["290", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Initial 16FPS Video"}},
+    "94":  {"inputs": {"frame_rate": 60, "loop_count": 0, "filename_prefix": "Hunyuan/videos/30/vid", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["303", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Final 60 FPS Video"}},
+    "95":  {"inputs": {"frame_rate": 16, "loop_count": 0, "filename_prefix": "Hunyuan/videos/24/vid", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["98", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Upscaled 16 FPS video"}},
+    "98":  {"inputs": {"upscale_method": "lanczos", "width": ["220", 0], "height": ["219", 0], "crop": "center", "image": ["290", 0]}, "class_type": "ImageScale"},
     "154": {"inputs": {"model_name": "4x_foolhardy_Remacri.pth"}, "class_type": "UpscaleModelLoader"},
     "155": {"inputs": {"UPSCALE_MODEL": ["154", 0]}, "class_type": "Anything Everywhere"},
     "218": {"inputs": {"image": "PLACEHOLDER.jpg"}, "class_type": "LoadImage", "_meta": {"title": "Input Image"}},
@@ -216,11 +246,14 @@ async def result(
             break
 
     if not video_info:
-        return JSONResponse(status_code=500, content={"status": "error", "detail": "No video found in outputs", "output_nodes": list(outputs.keys())})
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "detail": "No video found in outputs", "output_nodes": list(outputs.keys())},
+        )
 
-    filename = video_info["filename"]
+    filename  = video_info["filename"]
     subfolder = video_info.get("subfolder", "")
-    params = {"filename": filename, "type": "output"}
+    params    = {"filename": filename, "type": "output"}
     if subfolder:
         params["subfolder"] = subfolder
 
@@ -239,30 +272,52 @@ async def result(
 
 @app.get("/api/admin/models")
 async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
-    # Load models.json — prefer /workspace version (editable without rebuild)
     models_file = MODELS_JSON if MODELS_JSON.exists() else MODELS_JSON_DEFAULT
     models = json.loads(models_file.read_text())
 
     result = []
     for m in models:
         dest_path = MODELS_BASE / m["dest"] / m["file"]
-        on_disk_bytes = dest_path.stat().st_size if dest_path.exists() else 0
-        expected_bytes = int(m["size_gb"] * 1024 ** 3)
+        state     = _download_state.get(m["file"])
 
-        state = _download_state.get(m["file"])
-        if state:
-            status = state["status"]
-        elif on_disk_bytes > 0:
-            status = "present"
+        if state and state["status"] == "downloading":
+            # Live download: use real bytes from thread and Content-Length as total.
+            # If server omitted Content-Length, total is 0 and progress is None.
+            on_disk_bytes  = state["bytes"]
+            expected_bytes = state["total"]
+            status         = "downloading"
+            progress       = round(on_disk_bytes / expected_bytes * 100, 1) if expected_bytes > 0 else None
+
+        elif state and state["status"] == "error":
+            on_disk_bytes  = 0
+            expected_bytes = int(m["size_gb"] * 1000 ** 3)
+            status         = "error"
+            progress       = 0.0
+
+        elif dest_path.exists():
+            # File present on disk (download completed or already existed before this session).
+            on_disk_bytes  = dest_path.stat().st_size
+            expected_bytes = on_disk_bytes   # it IS the real size
+            status         = "present"
+            progress       = 100.0
+
         else:
-            status = "missing"
+            # Not downloaded yet.
+            on_disk_bytes  = 0
+            expected_bytes = int(m["size_gb"] * 1000 ** 3)  # display estimate only
+            status         = "missing"
+            progress       = 0.0
 
         result.append({
-            **m,
-            "status": status,
-            "on_disk_bytes": on_disk_bytes,
+            "name":           m["name"],
+            "file":           m["file"],
+            "dest":           m["dest"],
+            "url":            m["url"],
+            "size_gb":        m["size_gb"],
+            "status":         status,
+            "on_disk_bytes":  on_disk_bytes,
             "expected_bytes": expected_bytes,
-            "progress": round(on_disk_bytes / expected_bytes * 100, 1) if expected_bytes > 0 else 0,
+            "progress":       progress,   # float 0-100, or null if total unknown
         })
 
     return JSONResponse(result)
@@ -279,13 +334,16 @@ async def models_download(
 
     model = next((m for m in models if m["file"] == filename), None)
     if not model:
-        raise HTTPException(status_code=404, detail=f"Model {filename} not in models.json")
+        raise HTTPException(status_code=404, detail=f"Model '{filename}' not found in models.json")
 
     if _download_state.get(filename, {}).get("status") == "downloading":
         return JSONResponse({"status": "already_downloading"})
 
-    dest_dir = MODELS_BASE / model["dest"]
-    t = threading.Thread(target=_do_download, args=(model["repo"], filename, dest_dir), daemon=True)
+    t = threading.Thread(
+        target=_do_download,
+        args=(model["url"], filename, MODELS_BASE / model["dest"]),
+        daemon=True,
+    )
     t.start()
 
     return JSONResponse({"status": "started", "filename": filename})
