@@ -112,11 +112,11 @@ RUN pip install \
     huggingface_hub && \
     rm -rf /root/.cache/pip
 
-# ── main.py in /app — NOT in /workspace ─────────────────────
+# ── app/ in /app — NOT in /workspace ────────────────────────
 # /workspace is the Network Volume — nothing should be placed
-# there during the image build
-RUN mkdir -p /app
-COPY main.py /app/main.py
+# there during the image build.
+# Includes main.py, models.json, and www/ static pages.
+COPY app/ /app/
 
 # ── startup script ───────────────────────────────────────────
 COPY start.sh /start.sh

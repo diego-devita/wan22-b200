@@ -1,18 +1,72 @@
-import copy, uuid
+import copy, uuid, json, os, threading
+from pathlib import Path
+from typing import Optional
+
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends, Request
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse, RedirectResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
 
 app = FastAPI(title="WAN 2.2 i2v API")
 
-COMFY_URL = "http://127.0.0.1:8188"
+# ── Auth ─────────────────────────────────────────────────────
+# API_KEY is set as environment variable in RunPod template.
+# All routes except /api/health require HTTP Basic Auth.
+# Username: anything  Password: API_KEY value
+security = HTTPBasic()
+API_KEY = os.environ.get("API_KEY", "changeme")
 
-# Node IDs from the workflow
-LOAD_IMAGE_NODE = "218"
+def require_auth(credentials: HTTPBasicCredentials = Depends(security)):
+    correct = secrets.compare_digest(credentials.password.encode(), API_KEY.encode())
+    if not correct:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials
+
+# ── Paths ────────────────────────────────────────────────────
+COMFY_URL       = "http://127.0.0.1:8188"
+COMFYUI_DIR     = Path("/workspace/ComfyUI")
+MODELS_BASE     = COMFYUI_DIR / "models"
+MODELS_JSON     = Path("/workspace/models.json")
+MODELS_JSON_DEFAULT = Path("/app/models.json")
+
+# WWW root: prefer volume (editable), fall back to image
+WWW_ROOT = Path("/workspace/www")
+WWW_DEFAULT = Path("/app/www")
+
+def www(path: str) -> Path:
+    p = WWW_ROOT / path
+    if p.exists():
+        return p
+    return WWW_DEFAULT / path
+
+# ── Download state ────────────────────────────────────────────
+# { filename: {"status": "downloading"|"done"|"error", "bytes": int} }
+_download_state: dict = {}
+
+def _do_download(repo: str, filename: str, dest_dir: Path):
+    _download_state[filename] = {"status": "downloading", "bytes": 0}
+    try:
+        from huggingface_hub import hf_hub_download
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        hf_hub_download(
+            repo_id=repo,
+            filename=filename,
+            local_dir=str(dest_dir),
+        )
+        _download_state[filename] = {"status": "done", "bytes": (dest_dir / filename).stat().st_size}
+    except Exception as e:
+        _download_state[filename] = {"status": "error", "bytes": 0, "error": str(e)}
+
+# ── Workflow ──────────────────────────────────────────────────
+LOAD_IMAGE_NODE    = "218"
 POSITIVE_PROMPT_NODE = "243"
-DURATION_NODE = "319"
+DURATION_NODE      = "319"
 
-# Full workflow definition
 WORKFLOW = {
     "80": {"inputs": {"frame_rate": 16, "loop_count": 0, "filename_prefix": "teacache", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["290", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Initial 16FPS Video"}},
     "94": {"inputs": {"frame_rate": 60, "loop_count": 0, "filename_prefix": "Hunyuan/videos/30/vid", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["303", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Final 60 FPS Video"}},
@@ -48,22 +102,43 @@ WORKFLOW = {
     "319": {"inputs": {"value": 81}, "class_type": "PrimitiveInt", "_meta": {"title": "Video Duration (81=5s 161=10s 241=15s 321=20s)"}},
 }
 
+# ── HTML pages ────────────────────────────────────────────────
 
-# ─────────────────────────────────────────────────────────────
-# ENDPOINT 1 — /upload
-# Upload input image to ComfyUI input folder.
-# Returns the registered filename to use in /queue.
-# ─────────────────────────────────────────────────────────────
-@app.post("/upload")
-async def upload(image: UploadFile = File(...)):
-    """
-    Upload an image to ComfyUI.
-    Returns: { "filename": "abc123.jpg" }
-    Use the returned filename in the /queue call.
-    """
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/app")
+
+@app.get("/app", response_class=HTMLResponse)
+async def serve_app(_: HTTPBasicCredentials = Depends(require_auth)):
+    return HTMLResponse(www("index.html").read_text())
+
+@app.get("/admin/models", response_class=HTMLResponse)
+async def serve_admin(_: HTTPBasicCredentials = Depends(require_auth)):
+    return HTMLResponse(www("models.html").read_text())
+
+# ── API: health (no auth) ─────────────────────────────────────
+
+@app.get("/api/health")
+async def health():
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{COMFY_URL}/system_stats")
+            r.raise_for_status()
+        return {"status": "ok", "comfyui": "reachable"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "comfyui": "unreachable", "detail": str(e)},
+        )
+
+# ── API: upload ───────────────────────────────────────────────
+
+@app.post("/api/upload")
+async def upload(
+    image: UploadFile = File(...),
+    _: HTTPBasicCredentials = Depends(require_auth),
+):
     image_bytes = await image.read()
-
-    # Unique name to avoid collisions between parallel requests
     ext = image.filename.rsplit(".", 1)[-1] if "." in image.filename else "jpg"
     unique_name = f"{uuid.uuid4().hex}.{ext}"
 
@@ -78,25 +153,15 @@ async def upload(image: UploadFile = File(...)):
 
     return JSONResponse({"filename": registered_name})
 
+# ── API: queue ────────────────────────────────────────────────
 
-# ─────────────────────────────────────────────────────────────
-# ENDPOINT 2 — /queue
-# Queue the workflow with the given parameters.
-# Returns the prompt_id to use in /result/{prompt_id}.
-# ─────────────────────────────────────────────────────────────
-@app.post("/queue")
+@app.post("/api/queue")
 async def queue(
     filename: str = Form(...),
     positive_prompt: str = Form(...),
-    duration_frames: int = Form(81),  # 81=5s | 161=10s | 241=15s | 321=20s
+    duration_frames: int = Form(81),
+    _: HTTPBasicCredentials = Depends(require_auth),
 ):
-    """
-    Queue a video generation job.
-    - filename: name returned by /upload
-    - positive_prompt: description of the video to generate
-    - duration_frames: 81=5s, 161=10s, 241=15s, 321=20s (default 81)
-    Returns: { "prompt_id": "..." }
-    """
     workflow = copy.deepcopy(WORKFLOW)
     workflow[LOAD_IMAGE_NODE]["inputs"]["image"] = filename
     workflow[POSITIVE_PROMPT_NODE]["inputs"]["text"] = positive_prompt
@@ -117,50 +182,32 @@ async def queue(
 
     return JSONResponse({"prompt_id": data["prompt_id"]})
 
+# ── API: result ───────────────────────────────────────────────
 
-# ─────────────────────────────────────────────────────────────
-# ENDPOINT 3 — /result/{prompt_id}
-# Poll job status.
-# Returns the MP4 file directly when complete,
-# or a status object if still processing.
-# ─────────────────────────────────────────────────────────────
-@app.get("/result/{prompt_id}")
-async def result(prompt_id: str):
-    """
-    Check job status and download the video when ready.
-    Possible responses:
-    - { "status": "pending" }  → job still queued or running
-    - { "status": "error", "detail": "..." }  → job failed
-    - MP4 file directly  → job completed
-    """
+@app.get("/api/result/{prompt_id}")
+async def result(
+    prompt_id: str,
+    _: HTTPBasicCredentials = Depends(require_auth),
+):
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.get(f"{COMFY_URL}/history/{prompt_id}")
         r.raise_for_status()
         history = r.json()
 
-    # Job not yet in history — still queued or running
     if prompt_id not in history:
         return JSONResponse({"status": "pending"})
 
     job = history[prompt_id]
-
-    # Check for errors
     status_str = job.get("status", {}).get("status_str", "")
     if status_str == "error":
         messages = job.get("status", {}).get("messages", [])
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "detail": str(messages)},
-        )
+        return JSONResponse(status_code=500, content={"status": "error", "detail": str(messages)})
 
     outputs = job.get("outputs", {})
-
-    # Look for video in outputs — priority: node 94 (60fps) → 95 (upscaled 16fps) → 80 (16fps raw)
     video_info = None
     for node_id in ["94", "95", "80"]:
         if node_id in outputs:
             node_out = outputs[node_id]
-            # VHS_VideoCombine uses "gifs" as key even for MP4
             for key in ("gifs", "videos"):
                 if key in node_out and node_out[key]:
                     video_info = node_out[key][0]
@@ -169,20 +216,10 @@ async def result(prompt_id: str):
             break
 
     if not video_info:
-        # Job completed but no video found — return debug info
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "detail": "No video found in outputs",
-                "output_nodes": list(outputs.keys()),
-            },
-        )
+        return JSONResponse(status_code=500, content={"status": "error", "detail": "No video found in outputs", "output_nodes": list(outputs.keys())})
 
-    # Download the video from ComfyUI and stream it directly to the client
     filename = video_info["filename"]
     subfolder = video_info.get("subfolder", "")
-
     params = {"filename": filename, "type": "output"}
     if subfolder:
         params["subfolder"] = subfolder
@@ -198,20 +235,57 @@ async def result(prompt_id: str):
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
+# ── API: models list ──────────────────────────────────────────
 
-# ─────────────────────────────────────────────────────────────
-# ENDPOINT EXTRA — /health
-# Check that ComfyUI is reachable.
-# ─────────────────────────────────────────────────────────────
-@app.get("/health")
-async def health():
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(f"{COMFY_URL}/system_stats")
-            r.raise_for_status()
-        return {"status": "ok", "comfyui": "reachable"}
-    except Exception as e:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "error", "comfyui": "unreachable", "detail": str(e)},
-        )
+@app.get("/api/admin/models")
+async def models_list(_: HTTPBasicCredentials = Depends(require_auth)):
+    # Load models.json — prefer /workspace version (editable without rebuild)
+    models_file = MODELS_JSON if MODELS_JSON.exists() else MODELS_JSON_DEFAULT
+    models = json.loads(models_file.read_text())
+
+    result = []
+    for m in models:
+        dest_path = MODELS_BASE / m["dest"] / m["file"]
+        on_disk_bytes = dest_path.stat().st_size if dest_path.exists() else 0
+        expected_bytes = int(m["size_gb"] * 1024 ** 3)
+
+        state = _download_state.get(m["file"])
+        if state:
+            status = state["status"]
+        elif on_disk_bytes > 0:
+            status = "present"
+        else:
+            status = "missing"
+
+        result.append({
+            **m,
+            "status": status,
+            "on_disk_bytes": on_disk_bytes,
+            "expected_bytes": expected_bytes,
+            "progress": round(on_disk_bytes / expected_bytes * 100, 1) if expected_bytes > 0 else 0,
+        })
+
+    return JSONResponse(result)
+
+# ── API: start download ───────────────────────────────────────
+
+@app.post("/api/admin/models/download/{filename}")
+async def models_download(
+    filename: str,
+    _: HTTPBasicCredentials = Depends(require_auth),
+):
+    models_file = MODELS_JSON if MODELS_JSON.exists() else MODELS_JSON_DEFAULT
+    models = json.loads(models_file.read_text())
+
+    model = next((m for m in models if m["file"] == filename), None)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model {filename} not in models.json")
+
+    if _download_state.get(filename, {}).get("status") == "downloading":
+        return JSONResponse({"status": "already_downloading"})
+
+    dest_dir = MODELS_BASE / model["dest"]
+    t = threading.Thread(target=_do_download, args=(model["repo"], filename, dest_dir), daemon=True)
+    t.start()
+
+    return JSONResponse({"status": "started", "filename": filename})

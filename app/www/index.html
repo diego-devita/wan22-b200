@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WAN 2.2 — Video Generator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #1e1e1e;
+    --accent: #e8ff47;
+    --accent2: #ff4766;
+    --text: #e8e8e8;
+    --muted: #555;
+    --success: #47ffa0;
+    --error: #ff4766;
+    --mono: 'Space Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.4;
+  }
+
+  header {
+    padding: 40px 48px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 28px;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  .logo span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .admin-link {
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    transition: all 0.15s;
+  }
+
+  .admin-link:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .health-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .health-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  .health-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    min-height: calc(100vh - 97px);
+  }
+
+  .panel-left {
+    border-right: 1px solid var(--border);
+    padding: 40px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  input[type="text"], textarea {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 14px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+
+  input[type="text"]:focus, textarea:focus { border-color: var(--accent); }
+
+  textarea {
+    resize: vertical;
+    min-height: 90px;
+    line-height: 1.6;
+  }
+
+  .drop-zone {
+    border: 1px dashed var(--border);
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(232, 255, 71, 0.03);
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .drop-icon { font-size: 28px; margin-bottom: 10px; opacity: 0.4; }
+
+  .drop-label { color: var(--muted); font-size: 11px; letter-spacing: 1px; }
+  .drop-label strong { color: var(--accent); }
+
+  .preview-img {
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    display: none;
+    margin-top: 12px;
+  }
+
+  .duration-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .dur-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 10px 4px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    letter-spacing: 0.5px;
+  }
+
+  .dur-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .dur-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+    font-weight: 700;
+  }
+
+  .btn-generate {
+    background: var(--accent);
+    border: none;
+    color: #000;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 1px;
+    padding: 16px 24px;
+    cursor: pointer;
+    width: 100%;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-generate:hover:not(:disabled) {
+    background: #d4eb30;
+    transform: translateY(-1px);
+  }
+
+  .btn-generate:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-generate .spinner {
+    display: none;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #000;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  .btn-generate.loading .spinner { display: inline-block; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .panel-right {
+    padding: 40px 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+    opacity: 0.3;
+    transition: opacity 0.3s;
+  }
+
+  .step.active { opacity: 1; }
+  .step.done { opacity: 0.7; }
+  .step.error-step { opacity: 1; }
+
+  .step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    margin-top: 4px;
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+
+  .step.active .step-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .step.done .step-dot { background: var(--success); }
+  .step.error-step .step-dot { background: var(--error); }
+
+  .step-content { flex: 1; }
+
+  .step-title {
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .step-detail { color: var(--muted); font-size: 11px; }
+  .step.active .step-detail { color: var(--text); }
+
+  .poll-status {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .poll-status.visible { display: flex; }
+
+  .poll-bar { height: 2px; background: var(--border); overflow: hidden; }
+  .poll-bar-fill { height: 100%; background: var(--accent); width: 0%; }
+
+  .poll-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .error-banner {
+    display: none;
+    background: rgba(255, 71, 102, 0.1);
+    border: 1px solid var(--error);
+    color: var(--error);
+    padding: 12px 16px;
+    font-size: 12px;
+  }
+
+  .error-banner.visible { display: block; }
+
+  .log-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    font-size: 11px;
+    min-height: 80px;
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .log-line { font-family: var(--mono); line-height: 1.6; }
+  .log-ok { color: var(--success); }
+  .log-err { color: var(--error); }
+  .log-info { color: var(--muted); }
+
+  .output-box {
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .output-box.visible { display: flex; }
+
+  .output-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .output-title {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .output-meta { font-size: 11px; color: var(--muted); }
+
+  #output-video {
+    width: 100%;
+    max-height: 480px;
+    background: #000;
+  }
+
+  .btn-download {
+    display: block;
+    margin: 0 20px 20px;
+    padding: 12px 20px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-decoration: none;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-download:hover {
+    background: var(--accent);
+    color: #000;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">WAN<span>2.2</span></div>
+  <div class="header-right">
+    <a class="admin-link" href="/admin/models">⬡ Models</a>
+    <div class="health-badge">
+      <div class="health-dot" id="health-dot"></div>
+      <span class="health-label" id="health-label">CHECKING</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ── LEFT PANEL ── -->
+  <div class="panel-left">
+
+    <div>
+      <div class="section-label">Immagine di input</div>
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept="image/*">
+        <div class="drop-icon">🖼</div>
+        <div class="drop-label">Trascina o <strong>clicca</strong> per selezionare</div>
+      </div>
+      <img class="preview-img" id="preview-img" alt="preview">
+    </div>
+
+    <div>
+      <div class="section-label">Prompt positivo</div>
+      <textarea id="prompt" placeholder="Describe the motion and scene..."></textarea>
+    </div>
+
+    <div>
+      <div class="section-label">Durata video</div>
+      <div class="duration-grid">
+        <button class="dur-btn active" data-frames="81">5s</button>
+        <button class="dur-btn" data-frames="161">10s</button>
+        <button class="dur-btn" data-frames="241">15s</button>
+        <button class="dur-btn" data-frames="321">20s</button>
+      </div>
+    </div>
+
+    <button class="btn-generate" id="btn-generate" onclick="startGeneration()">
+      <span class="spinner"></span>
+      <span class="btn-label">Genera Video</span>
+    </button>
+
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div class="panel-right">
+
+    <div class="section-label">Stato</div>
+    <div class="timeline">
+      <div class="step" id="step-upload">
+        <div class="step-dot"></div>
+        <div class="step-content">
+          <div class="step-title">Upload immagine</div>
+          <div class="step-detail" id="step-upload-detail">In attesa...</div>
+        </div>
+      </div>
+      <div class="step" id="step-queue">
+        <div class="step-dot"></div>
+        <div class="step-content">
+          <div class="step-title">Workflow in coda</div>
+          <div class="step-detail" id="step-queue-detail">In attesa...</div>
+        </div>
+      </div>
+      <div class="step" id="step-process">
+        <div class="step-dot"></div>
+        <div class="step-content">
+          <div class="step-title">Generazione video</div>
+          <div class="step-detail" id="step-process-detail">In attesa...</div>
+        </div>
+      </div>
+      <div class="step" id="step-done">
+        <div class="step-dot"></div>
+        <div class="step-content">
+          <div class="step-title">Completato</div>
+          <div class="step-detail" id="step-done-detail">In attesa...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="poll-status" id="poll-status">
+      <div class="poll-bar"><div class="poll-bar-fill" id="poll-bar-fill"></div></div>
+      <div class="poll-meta">
+        <span id="poll-label">polling...</span>
+        <span id="poll-elapsed">0s</span>
+      </div>
+    </div>
+
+    <div class="error-banner" id="error-banner"></div>
+
+    <div class="section-label" style="margin-top:8px;">Log</div>
+    <div class="log-box" id="log-box"></div>
+
+    <div class="output-box" id="output-box">
+      <div class="output-header">
+        <span class="output-title">Output</span>
+        <span class="output-meta" id="output-meta"></span>
+      </div>
+      <video id="output-video" controls loop></video>
+      <a class="btn-download" id="btn-download" download>↓ Download MP4</a>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// ── state ──────────────────────────────────────────────────
+let selectedFile = null;
+let selectedFrames = 81;
+let pollInterval = null;
+let pollStart = null;
+
+// ── utils ──────────────────────────────────────────────────
+function log(msg, type = '') {
+  const box = document.getElementById('log-box');
+  const line = document.createElement('span');
+  line.className = `log-line log-${type}`;
+  const ts = new Date().toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  line.textContent = `[${ts}] ${msg}`;
+  box.appendChild(line);
+  box.appendChild(document.createElement('br'));
+  box.scrollTop = box.scrollHeight;
+}
+
+function setStep(id, state, detail) {
+  const el = document.getElementById(id);
+  el.className = 'step ' + state;
+  if (detail !== undefined) {
+    document.getElementById(id + '-detail').textContent = detail;
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = msg;
+  el.classList.add('visible');
+  log(msg, 'err');
+}
+
+function clearError() {
+  document.getElementById('error-banner').classList.remove('visible');
+}
+
+function resetUI() {
+  ['step-upload','step-queue','step-process','step-done'].forEach(id => {
+    setStep(id, '', 'In attesa...');
+  });
+  document.getElementById('poll-status').classList.remove('visible');
+  document.getElementById('output-box').classList.remove('visible');
+  document.getElementById('log-box').innerHTML = '';
+  clearError();
+  stopPolling();
+}
+
+function setBusy(busy) {
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = busy;
+  btn.classList.toggle('loading', busy);
+  btn.querySelector('.btn-label').textContent = busy ? 'Generazione...' : 'Genera Video';
+}
+
+// ── health check (path relativo) ───────────────────────────
+async function checkHealth() {
+  try {
+    const r = await fetch('/api/health');
+    const data = await r.json();
+    const ok = data.status === 'ok';
+    document.getElementById('health-dot').style.background = ok ? 'var(--success)' : 'var(--error)';
+    document.getElementById('health-dot').style.boxShadow = ok ? '0 0 8px var(--success)' : 'none';
+    document.getElementById('health-label').textContent = ok ? 'ONLINE' : 'ERROR';
+    document.getElementById('health-label').style.color = ok ? 'var(--success)' : 'var(--error)';
+  } catch {
+    document.getElementById('health-dot').style.background = 'var(--error)';
+    document.getElementById('health-label').textContent = 'OFFLINE';
+    document.getElementById('health-label').style.color = 'var(--error)';
+  }
+}
+
+checkHealth();
+setInterval(checkHealth, 10000);
+
+// ── file handling ──────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const previewImg = document.getElementById('preview-img');
+
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  selectedFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    previewImg.src = e.target.result;
+    previewImg.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+  log(`File selezionato: ${file.name} (${(file.size/1024).toFixed(1)} KB)`, 'info');
+}
+
+// ── duration selector ──────────────────────────────────────
+document.querySelectorAll('.dur-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedFrames = parseInt(btn.dataset.frames);
+  });
+});
+
+// ── polling ────────────────────────────────────────────────
+function startPolling(promptId) {
+  const pollEl = document.getElementById('poll-status');
+  const pollLabel = document.getElementById('poll-label');
+  const pollElapsed = document.getElementById('poll-elapsed');
+  const pollBarFill = document.getElementById('poll-bar-fill');
+
+  pollEl.classList.add('visible');
+  pollStart = Date.now();
+
+  pollInterval = setInterval(async () => {
+    const elapsed = Math.floor((Date.now() - pollStart) / 1000);
+    pollElapsed.textContent = `${elapsed}s`;
+
+    const pct = Math.min(95, (elapsed / 120) * 100);
+    pollBarFill.style.width = pct + '%';
+    pollBarFill.style.transition = 'width 3s linear';
+    pollLabel.textContent = `polling prompt_id: ${promptId.slice(0,8)}...`;
+
+    try {
+      const r = await fetch(`/api/result/${promptId}`);
+
+      if (r.status === 200 && r.headers.get('content-type')?.includes('video')) {
+        stopPolling();
+        pollBarFill.style.width = '100%';
+        pollBarFill.style.transition = 'width 0.3s';
+
+        const blob = await r.blob();
+        const videoUrl = URL.createObjectURL(blob);
+        const duration = elapsed;
+
+        setStep('step-process', 'done', `Completato in ${duration}s`);
+        setStep('step-done', 'done', `Video pronto — ${(blob.size/1024/1024).toFixed(1)} MB`);
+        log(`Video generato in ${duration}s — ${(blob.size/1024/1024).toFixed(1)} MB`, 'ok');
+
+        const videoEl = document.getElementById('output-video');
+        videoEl.src = videoUrl;
+
+        const dlBtn = document.getElementById('btn-download');
+        dlBtn.href = videoUrl;
+        dlBtn.download = `wan22_${Date.now()}.mp4`;
+
+        document.getElementById('output-meta').textContent =
+          `${(blob.size/1024/1024).toFixed(1)} MB · ${duration}s di generazione`;
+
+        document.getElementById('output-box').classList.add('visible');
+        setBusy(false);
+
+      } else if (r.status === 200) {
+        const data = await r.json();
+        if (data.status === 'pending') {
+          setStep('step-process', 'active', `In elaborazione... ${elapsed}s`);
+        } else if (data.status === 'error') {
+          stopPolling();
+          setStep('step-process', 'error-step', 'Errore ComfyUI');
+          showError(data.detail || 'Errore sconosciuto');
+          setBusy(false);
+        }
+      } else if (r.status === 500) {
+        const data = await r.json();
+        stopPolling();
+        setStep('step-process', 'error-step', 'Errore');
+        showError(data.detail || 'Errore 500');
+        setBusy(false);
+      }
+
+    } catch (err) {
+      log(`Polling error: ${err.message}`, 'err');
+    }
+  }, 3000);
+}
+
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+// ── main flow ──────────────────────────────────────────────
+async function startGeneration() {
+  if (!selectedFile) return showError('Seleziona un\'immagine');
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) return showError('Inserisci un prompt');
+
+  resetUI();
+  setBusy(true);
+
+  // STEP 1: upload
+  setStep('step-upload', 'active', 'Caricamento in corso...');
+  log('Inizio upload immagine...', 'info');
+
+  let filename;
+  try {
+    const formData = new FormData();
+    formData.append('image', selectedFile);
+
+    const r = await fetch('/api/upload', { method: 'POST', body: formData });
+    if (!r.ok) throw new Error(`Upload fallito: HTTP ${r.status}`);
+    const data = await r.json();
+    filename = data.filename;
+
+    setStep('step-upload', 'done', `OK → ${filename}`);
+    log(`Upload OK → ${filename}`, 'ok');
+
+  } catch (err) {
+    setStep('step-upload', 'error-step', err.message);
+    showError(err.message);
+    setBusy(false);
+    return;
+  }
+
+  // STEP 2: queue
+  setStep('step-queue', 'active', 'Invio workflow...');
+  log('Invio workflow in coda...', 'info');
+
+  let promptId;
+  try {
+    const formData = new FormData();
+    formData.append('filename', filename);
+    formData.append('positive_prompt', prompt);
+    formData.append('duration_frames', String(selectedFrames));
+
+    const r = await fetch('/api/queue', { method: 'POST', body: formData });
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.detail || `Queue fallita: HTTP ${r.status}`);
+    }
+    const data = await r.json();
+    promptId = data.prompt_id;
+
+    setStep('step-queue', 'done', `prompt_id: ${promptId.slice(0,16)}...`);
+    log(`In coda → prompt_id: ${promptId}`, 'ok');
+
+  } catch (err) {
+    setStep('step-queue', 'error-step', err.message);
+    showError(err.message);
+    setBusy(false);
+    return;
+  }
+
+  // STEP 3: polling
+  setStep('step-process', 'active', 'Generazione avviata...');
+  log(`Polling ogni 3s su /api/result/${promptId}`, 'info');
+  startPolling(promptId);
+}
+</script>
+</body>
+</html>
