@@ -1,19 +1,25 @@
 # ============================================================
 # WAN 2.2 i2v — RunPod B200 Template
 # CUDA 12.8.1 | PyTorch cu128 | ComfyUI | FastAPI wrapper
-# Porte: 8188 (ComfyUI) | 8000 (API)
+# Ports: 8188 (ComfyUI) | 8000 (API)
+#
+# ARCHITECTURE:
+# - ComfyUI installed in /comfyui (inside the image)
+# - On first boot, start.sh copies /comfyui → /workspace/ComfyUI
+# - Everything runs from /workspace (RunPod Network Volume)
+# - Models are downloaded to /workspace on first boot
 # ============================================================
 
 FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04
 
-# ── variabili d'ambiente ─────────────────────────────────────
+# ── environment variables ────────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PIP_PREFER_BINARY=1
 ENV PIP_NO_CACHE_DIR=1
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
-# ── dipendenze di sistema ────────────────────────────────────
+# ── system dependencies ──────────────────────────────────────
 RUN apt-get update && apt-get install -y \
     python3.12 \
     python3.12-venv \
@@ -35,11 +41,11 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-# ── venv ─────────────────────────────────────────────────────
+# ── virtual environment ──────────────────────────────────────
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# ── PyTorch cu128 (stabile, compatibile B200) ────────────────
+# ── PyTorch cu128 (stable, B200 compatible) ──────────────────
 RUN pip install --upgrade pip setuptools wheel && \
     pip install \
         torch \
@@ -48,15 +54,16 @@ RUN pip install --upgrade pip setuptools wheel && \
         --index-url https://download.pytorch.org/whl/cu128 && \
     rm -rf /root/.cache/pip
 
-# ── ComfyUI ──────────────────────────────────────────────────
-WORKDIR /workspace
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git && \
-    cd ComfyUI && \
+# ── ComfyUI in /comfyui ──────────────────────────────────────
+# NOT in /workspace — that is the Network Volume, mounted at
+# runtime and overwrites anything placed there during build
+WORKDIR /comfyui
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
     pip install -r requirements.txt && \
     rm -rf /root/.cache/pip
 
 # ── custom nodes ─────────────────────────────────────────────
-WORKDIR /workspace/ComfyUI/custom_nodes
+WORKDIR /comfyui/custom_nodes
 
 # ComfyUI-Manager
 RUN git clone https://github.com/ltdrdata/ComfyUI-Manager.git && \
@@ -77,6 +84,7 @@ RUN git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && \
     rm -rf /root/.cache/pip
 
 # ComfyUI-Frame-Interpolation — RIFE VFI
+# uses requirements-no-cupy.txt because requirements.txt does not exist
 RUN git clone https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git && \
     cd ComfyUI-Frame-Interpolation && \
     pip install -r requirements-no-cupy.txt && \
@@ -91,28 +99,30 @@ RUN git clone https://github.com/ltdrdata/ComfyUI-Impact-Pack.git && \
 
 # cg-use-everywhere — Anything Everywhere, Prompts Everywhere
 RUN git clone https://github.com/chrisgoringe/cg-use-everywhere.git
-# nessun requirements.txt
 
-# ComfyLiterals — nodo Float
+# ComfyLiterals — Float node
 RUN git clone https://github.com/M1kep/ComfyLiterals.git
-# nessun requirements.txt
 
-# ── dipendenze FastAPI wrapper ────────────────────────────────
+# ── FastAPI wrapper dependencies ─────────────────────────────
 RUN pip install \
     fastapi \
-    uvicorn[standard] \
+    "uvicorn[standard]" \
     httpx \
-    python-multipart && \
+    python-multipart \
+    huggingface_hub && \
     rm -rf /root/.cache/pip
 
-# ── copia il wrapper API ──────────────────────────────────────
-WORKDIR /workspace
-COPY main.py /workspace/main.py
+# ── main.py in /app — NOT in /workspace ─────────────────────
+# /workspace is the Network Volume — nothing should be placed
+# there during the image build
+RUN mkdir -p /app
+COPY main.py /app/main.py
 
-# ── startup script ────────────────────────────────────────────
+# ── startup script ───────────────────────────────────────────
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
+WORKDIR /
 EXPOSE 8188 8000
 
 CMD ["/start.sh"]

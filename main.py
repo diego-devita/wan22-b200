@@ -1,8 +1,4 @@
-import asyncio
-import copy
-import json
-import uuid
-
+import copy, uuid
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -11,12 +7,12 @@ app = FastAPI(title="WAN 2.2 i2v API")
 
 COMFY_URL = "http://127.0.0.1:8188"
 
-# Node ID del LoadImage nel tuo workflow
+# Node IDs from the workflow
 LOAD_IMAGE_NODE = "218"
 POSITIVE_PROMPT_NODE = "243"
 DURATION_NODE = "319"
 
-# Il tuo workflow completo
+# Full workflow definition
 WORKFLOW = {
     "80": {"inputs": {"frame_rate": 16, "loop_count": 0, "filename_prefix": "teacache", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["290", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Initial 16FPS Video"}},
     "94": {"inputs": {"frame_rate": 60, "loop_count": 0, "filename_prefix": "Hunyuan/videos/30/vid", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": True, "trim_to_audio": False, "pingpong": False, "save_output": True, "images": ["303", 0]}, "class_type": "VHS_VideoCombine", "_meta": {"title": "Final 60 FPS Video"}},
@@ -49,25 +45,25 @@ WORKFLOW = {
     "314": {"inputs": {"width": 240, "height": 416, "length": ["319", 0], "batch_size": 1, "positive": ["243", 0], "negative": ["244", 0], "vae": ["232", 0], "start_image": ["218", 0]}, "class_type": "WanImageToVideo"},
     "315": {"inputs": {"value": 20}, "class_type": "PrimitiveInt"},
     "316": {"inputs": {"value": "a / 2", "a": ["315", 0]}, "class_type": "SimpleMath+"},
-    "319": {"inputs": {"value": 81}, "class_type": "PrimitiveInt", "_meta": {"title": "Durata Video (81=5s 161=10s 241=15s 321=20s)"}},
+    "319": {"inputs": {"value": 81}, "class_type": "PrimitiveInt", "_meta": {"title": "Video Duration (81=5s 161=10s 241=15s 321=20s)"}},
 }
 
 
 # ─────────────────────────────────────────────────────────────
 # ENDPOINT 1 — /upload
-# Carica l'immagine di input nella cartella input/ di ComfyUI
-# Restituisce il nome file registrato da usare in /queue
+# Upload input image to ComfyUI input folder.
+# Returns the registered filename to use in /queue.
 # ─────────────────────────────────────────────────────────────
 @app.post("/upload")
 async def upload(image: UploadFile = File(...)):
     """
-    Carica un'immagine su ComfyUI.
-    Restituisce: { "filename": "abc123.jpg" }
-    Usa il filename restituito nella chiamata a /queue.
+    Upload an image to ComfyUI.
+    Returns: { "filename": "abc123.jpg" }
+    Use the returned filename in the /queue call.
     """
     image_bytes = await image.read()
 
-    # Nome univoco per evitare collisioni tra richieste parallele
+    # Unique name to avoid collisions between parallel requests
     ext = image.filename.rsplit(".", 1)[-1] if "." in image.filename else "jpg"
     unique_name = f"{uuid.uuid4().hex}.{ext}"
 
@@ -85,8 +81,8 @@ async def upload(image: UploadFile = File(...)):
 
 # ─────────────────────────────────────────────────────────────
 # ENDPOINT 2 — /queue
-# Mette in coda il workflow con i parametri ricevuti
-# Restituisce il prompt_id da usare in /result/{prompt_id}
+# Queue the workflow with the given parameters.
+# Returns the prompt_id to use in /result/{prompt_id}.
 # ─────────────────────────────────────────────────────────────
 @app.post("/queue")
 async def queue(
@@ -95,11 +91,11 @@ async def queue(
     duration_frames: int = Form(81),  # 81=5s | 161=10s | 241=15s | 321=20s
 ):
     """
-    Mette in coda la generazione del video.
-    - filename: nome restituito da /upload
-    - positive_prompt: descrizione del video da generare
+    Queue a video generation job.
+    - filename: name returned by /upload
+    - positive_prompt: description of the video to generate
     - duration_frames: 81=5s, 161=10s, 241=15s, 321=20s (default 81)
-    Restituisce: { "prompt_id": "..." }
+    Returns: { "prompt_id": "..." }
     """
     workflow = copy.deepcopy(WORKFLOW)
     workflow[LOAD_IMAGE_NODE]["inputs"]["image"] = filename
@@ -124,31 +120,31 @@ async def queue(
 
 # ─────────────────────────────────────────────────────────────
 # ENDPOINT 3 — /result/{prompt_id}
-# Polling sullo stato del job.
-# Se completato, restituisce direttamente il video MP4.
-# Se ancora in corso, restituisce lo stato.
+# Poll job status.
+# Returns the MP4 file directly when complete,
+# or a status object if still processing.
 # ─────────────────────────────────────────────────────────────
 @app.get("/result/{prompt_id}")
 async def result(prompt_id: str):
     """
-    Controlla lo stato del job e scarica il video se pronto.
-    Risposte possibili:
-    - { "status": "pending" }  → job ancora in coda o in esecuzione
-    - { "status": "error", "detail": "..." }  → job fallito
-    - video MP4 direttamente come file  → job completato
+    Check job status and download the video when ready.
+    Possible responses:
+    - { "status": "pending" }  → job still queued or running
+    - { "status": "error", "detail": "..." }  → job failed
+    - MP4 file directly  → job completed
     """
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.get(f"{COMFY_URL}/history/{prompt_id}")
         r.raise_for_status()
         history = r.json()
 
-    # Job non ancora in history → ancora in coda o in esecuzione
+    # Job not yet in history — still queued or running
     if prompt_id not in history:
         return JSONResponse({"status": "pending"})
 
     job = history[prompt_id]
 
-    # Controlla se c'è stato un errore
+    # Check for errors
     status_str = job.get("status", {}).get("status_str", "")
     if status_str == "error":
         messages = job.get("status", {}).get("messages", [])
@@ -159,12 +155,12 @@ async def result(prompt_id: str):
 
     outputs = job.get("outputs", {})
 
-    # Cerca il video negli output — priorità: nodo 94 (60fps) → 95 (upscaled 16fps) → 80 (16fps raw)
+    # Look for video in outputs — priority: node 94 (60fps) → 95 (upscaled 16fps) → 80 (16fps raw)
     video_info = None
     for node_id in ["94", "95", "80"]:
         if node_id in outputs:
             node_out = outputs[node_id]
-            # VHS_VideoCombine usa "gifs" come chiave anche per MP4
+            # VHS_VideoCombine uses "gifs" as key even for MP4
             for key in ("gifs", "videos"):
                 if key in node_out and node_out[key]:
                     video_info = node_out[key][0]
@@ -173,17 +169,17 @@ async def result(prompt_id: str):
             break
 
     if not video_info:
-        # Job completato ma nessun video trovato — restituisce debug
+        # Job completed but no video found — return debug info
         return JSONResponse(
             status_code=500,
             content={
                 "status": "error",
-                "detail": "Nessun video trovato negli output",
+                "detail": "No video found in outputs",
                 "output_nodes": list(outputs.keys()),
             },
         )
 
-    # Scarica il video da ComfyUI e lo restituisce direttamente al client
+    # Download the video from ComfyUI and stream it directly to the client
     filename = video_info["filename"]
     subfolder = video_info.get("subfolder", "")
 
@@ -205,7 +201,7 @@ async def result(prompt_id: str):
 
 # ─────────────────────────────────────────────────────────────
 # ENDPOINT EXTRA — /health
-# Verifica che ComfyUI sia raggiungibile
+# Check that ComfyUI is reachable.
 # ─────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
