@@ -79,7 +79,7 @@ RUN git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && \
 # ComfyUI-Frame-Interpolation — RIFE VFI
 RUN git clone https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git && \
     cd ComfyUI-Frame-Interpolation && \
-    pip install -r requirements.txt && \
+    pip install -r requirements-no-cupy.txt && \
     rm -rf /root/.cache/pip
 
 # ComfyUI-Impact-Pack — ImageListToImageBatch
